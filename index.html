@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#1a3a5c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Hauler HQ — CRM &amp; Invoicing</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="topbar-title">
+        <span class="logo">🚛</span>
+        <h1 id="topbarTitle">Hauler HQ</h1>
+      </div>
+      <button class="icon-btn" id="settingsBtn" aria-label="Settings">⚙️</button>
+    </header>
+
+    <main id="view" class="view"></main>
+
+    <button class="fab" id="fab" aria-label="Add">＋</button>
+
+    <nav class="bottomnav">
+      <button data-tab="dashboard" class="nav-btn active"><span class="nav-icon">🏠</span><span>Home</span></button>
+      <button data-tab="customers" class="nav-btn"><span class="nav-icon">👥</span><span>Customers</span></button>
+      <button data-tab="jobs" class="nav-btn"><span class="nav-icon">🚚</span><span>Jobs</span></button>
+      <button data-tab="invoices" class="nav-btn"><span class="nav-icon">🧾</span><span>Invoices</span></button>
+      <button data-tab="money" class="nav-btn"><span class="nav-icon">💰</span><span>Money</span></button>
+    </nav>
+
+    <div class="modal-backdrop" id="modalBackdrop" hidden>
+      <div class="modal-sheet" id="modalSheet" role="dialog" aria-modal="true"></div>
+    </div>
+
+    <div id="toast" class="toast" hidden></div>
+  </div>
+
+  <div id="printArea" class="print-area" aria-hidden="true"></div>
+
+  <script src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator && location.protocol === 'https:') {
+      navigator.serviceWorker.register('sw.js').catch(function(){});
+    }
+  </script>
+</body>
+</html>

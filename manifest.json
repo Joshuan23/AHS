@@ -1,16 +1,16 @@
 {
-  "name": "Hauler HQ — CRM & Invoicing",
-  "short_name": "Hauler HQ",
-  "description": "CRM, invoicing and money tracking for a hauling business",
+  "name": "Avery Hauling Services — CRM & Invoicing",
+  "short_name": "AHS Hauler HQ",
+  "description": "CRM, invoicing and money tracking for Avery Hauling Services LLC",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#1a3a5c",
-  "theme_color": "#1a3a5c",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
   "icons": [
     {
-      "src": "icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "assets/icon-512.png",
+      "sizes": "593x593",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]

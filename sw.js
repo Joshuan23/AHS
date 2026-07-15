@@ -1,6 +1,6 @@
 /* Hauler HQ service worker — cache app shell for offline use */
 var CACHE = 'haulerhq-v1';
-var ASSETS = ['.', 'index.html', 'styles.css', 'app.js', 'manifest.json', 'icon.svg'];
+var ASSETS = ['.', 'index.html', 'styles.css', 'app.js', 'manifest.json', 'assets/icon-512.png', 'assets/badge.png', 'assets/logo-full.png'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(

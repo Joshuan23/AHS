@@ -2,15 +2,23 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg: #f2f4f7;
+  /* Brand: sampled from the Avery Hauling Services badge (black plate, gold mark) */
+  --brand: #0a0a0a;
+  --plate-ink: #d9bd4e;
+  --accent: #a9860f;
+  --accent-ink: #14110a;
+  /* Emphasis = primary-action fill. Black-on-light in light mode; flips to
+     gold-on-dark in dark mode so it never blends into the near-black page. */
+  --emphasis: var(--brand);
+  --emphasis-ink: var(--plate-ink);
+
+  --bg: #f8f5ec;
   --surface: #ffffff;
-  --surface-2: #eef1f5;
-  --text: #16202b;
-  --text-2: #5b6b7c;
-  --line: #dde3ea;
-  --brand: #1a3a5c;
-  --brand-2: #2e6da4;
-  --accent: #e8842c;
+  --surface-2: #efe8d4;
+  --text: #1a1712;
+  --text-2: #6b6249;
+  --line: #e4dcc2;
+  --brand-2: #8a6d1f;
   --green: #1e7d46;
   --green-bg: #e2f3e9;
   --red: #b3362c;
@@ -19,22 +27,21 @@
   --amber-bg: #fcf0d5;
   --blue: #245f96;
   --blue-bg: #e2eefa;
-  --gray-bg: #e9edf2;
-  --shadow: 0 1px 3px rgba(20, 30, 45, .10), 0 4px 14px rgba(20, 30, 45, .06);
+  --gray-bg: #ede6d2;
+  --shadow: 0 1px 3px rgba(20, 16, 5, .10), 0 4px 14px rgba(20, 16, 5, .07);
   --radius: 14px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #10161d;
-    --surface: #1a222c;
-    --surface-2: #232d39;
-    --text: #e8edf3;
-    --text-2: #93a3b4;
-    --line: #2c3846;
-    --brand: #6ea8dc;
-    --brand-2: #7db4e6;
-    --accent: #f09a4a;
+    --bg: #0a0a0a;
+    --surface: #17130d;
+    --surface-2: #211b12;
+    --text: #f3ead2;
+    --text-2: #b7a97e;
+    --line: #332a18;
+    --brand-2: #d9bd4e;
+    --accent: #ccb140;
     --green: #5cc98a;
     --green-bg: #16321f;
     --red: #ef8a80;
@@ -43,24 +50,27 @@
     --amber-bg: #37300f;
     --blue: #7db4e6;
     --blue-bg: #1a2c3d;
-    --gray-bg: #232d39;
-    --shadow: 0 1px 3px rgba(0,0,0,.4);
+    --gray-bg: #211b12;
+    --shadow: 0 1px 3px rgba(0,0,0,.5);
+    --emphasis: var(--accent);
+    --emphasis-ink: var(--accent-ink);
   }
 }
 :root[data-theme="dark"] {
-  --bg: #10161d; --surface: #1a222c; --surface-2: #232d39; --text: #e8edf3;
-  --text-2: #93a3b4; --line: #2c3846; --brand: #6ea8dc; --brand-2: #7db4e6;
-  --accent: #f09a4a; --green: #5cc98a; --green-bg: #16321f; --red: #ef8a80;
+  --bg: #0a0a0a; --surface: #17130d; --surface-2: #211b12; --text: #f3ead2;
+  --text-2: #b7a97e; --line: #332a18; --brand-2: #d9bd4e;
+  --accent: #ccb140; --green: #5cc98a; --green-bg: #16321f; --red: #ef8a80;
   --red-bg: #3a201d; --amber: #e3b341; --amber-bg: #37300f; --blue: #7db4e6;
-  --blue-bg: #1a2c3d; --gray-bg: #232d39; --shadow: 0 1px 3px rgba(0,0,0,.4);
+  --blue-bg: #1a2c3d; --gray-bg: #211b12; --shadow: 0 1px 3px rgba(0,0,0,.5);
+  --emphasis: var(--accent); --emphasis-ink: var(--accent-ink);
 }
 :root[data-theme="light"] {
-  --bg: #f2f4f7; --surface: #ffffff; --surface-2: #eef1f5; --text: #16202b;
-  --text-2: #5b6b7c; --line: #dde3ea; --brand: #1a3a5c; --brand-2: #2e6da4;
-  --accent: #e8842c; --green: #1e7d46; --green-bg: #e2f3e9; --red: #b3362c;
+  --bg: #f8f5ec; --surface: #ffffff; --surface-2: #efe8d4; --text: #1a1712;
+  --text-2: #6b6249; --line: #e4dcc2; --brand-2: #8a6d1f;
+  --accent: #a9860f; --green: #1e7d46; --green-bg: #e2f3e9; --red: #b3362c;
   --red-bg: #fbe7e5; --amber: #9a6700; --amber-bg: #fcf0d5; --blue: #245f96;
-  --blue-bg: #e2eefa; --gray-bg: #e9edf2;
-  --shadow: 0 1px 3px rgba(20,30,45,.10), 0 4px 14px rgba(20,30,45,.06);
+  --blue-bg: #e2eefa; --gray-bg: #ede6d2;
+  --shadow: 0 1px 3px rgba(20,16,5,.10), 0 4px 14px rgba(20,16,5,.07);
 }
 
 html { -webkit-text-size-adjust: 100%; }
@@ -78,14 +88,16 @@ body {
   position: sticky; top: 0; z-index: 20;
   display: flex; align-items: center; justify-content: space-between;
   padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px;
-  background: var(--brand); color: #fff;
+  background: var(--brand); color: var(--plate-ink);
+  border-bottom: 2px solid var(--plate-ink);
 }
-:root[data-theme="dark"] .topbar, .dark-topbar { background: #14243a; }
-.topbar-title { display: flex; align-items: center; gap: 8px; }
-.topbar h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: .2px; }
-.logo { font-size: 1.3rem; }
+.topbar-title { display: flex; align-items: center; gap: 10px; }
+.topbar h1 {
+  font-size: 1rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+}
+.logo-mark { height: 30px; width: auto; display: block; }
 .icon-btn {
-  background: rgba(255,255,255,.14); border: none; color: #fff;
+  background: rgba(217,189,78,.16); border: none; color: var(--plate-ink);
   width: 38px; height: 38px; border-radius: 50%; font-size: 1.1rem; cursor: pointer;
 }
 
@@ -112,8 +124,8 @@ body {
 .fab {
   position: fixed; right: 18px; bottom: calc(env(safe-area-inset-bottom, 0px) + 78px);
   z-index: 21; width: 56px; height: 56px; border-radius: 50%;
-  background: var(--accent); color: #fff; font-size: 1.7rem; line-height: 1;
-  border: none; box-shadow: 0 4px 14px rgba(0,0,0,.25); cursor: pointer;
+  background: var(--accent); color: var(--accent-ink); font-size: 1.7rem; line-height: 1;
+  border: none; box-shadow: 0 4px 14px rgba(0,0,0,.3); cursor: pointer;
 }
 .fab[hidden] { display: none; }
 @media (min-width: 680px) { .fab { right: calc(50vw - 320px + 18px); } }
@@ -173,8 +185,7 @@ body {
   flex-shrink: 0; padding: 7px 14px; border-radius: 99px; border: 1px solid var(--line);
   background: var(--surface); color: var(--text-2); font-size: .8rem; font-weight: 650; cursor: pointer;
 }
-.chip.active { background: var(--brand); border-color: var(--brand); color: #fff; }
-:root[data-theme="dark"] .chip.active { color: #10161d; }
+.chip.active { background: var(--emphasis); border-color: var(--emphasis); color: var(--emphasis-ink); }
 
 /* Buttons */
 .btn {
@@ -182,8 +193,7 @@ body {
   border: none; border-radius: 11px; padding: 12px 16px; font-size: .92rem;
   font-weight: 700; cursor: pointer; width: 100%;
 }
-.btn.primary { background: var(--brand); color: #fff; }
-:root[data-theme="dark"] .btn.primary { color: #10161d; }
+.btn.primary { background: var(--emphasis); color: var(--emphasis-ink); }
 .btn.secondary { background: var(--surface-2); color: var(--text); }
 .btn.danger { background: var(--red-bg); color: var(--red); }
 .btn.small { width: auto; padding: 8px 13px; font-size: .8rem; border-radius: 9px; }
@@ -261,21 +271,23 @@ textarea { resize: vertical; min-height: 64px; }
 
 /* Invoice document preview */
 .invoice-doc {
-  background: #fff; color: #16202b; border-radius: var(--radius);
+  /* Fixed light-on-white regardless of app theme: this is a printed paper document */
+  background: #fff; color: #1a1712; border-radius: var(--radius);
   box-shadow: var(--shadow); padding: 22px 20px; margin-bottom: 12px;
   font-size: .85rem;
 }
-.invoice-doc .doc-head { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
-.invoice-doc .biz-name { font-size: 1.15rem; font-weight: 800; color: #1a3a5c; }
-.invoice-doc .doc-title { font-size: 1.3rem; font-weight: 800; text-align: right; color: #1a3a5c; }
-.invoice-doc .muted { color: #5b6b7c; font-size: .78rem; white-space: pre-line; }
+.invoice-doc .doc-head { display: flex; justify-content: space-between; gap: 14px; margin-bottom: 16px; }
+.invoice-doc .doc-logo { height: 46px; width: auto; display: block; margin-bottom: 6px; }
+.invoice-doc .biz-name { font-size: 1.1rem; font-weight: 800; color: #141110; }
+.invoice-doc .doc-title { font-size: 1.3rem; font-weight: 800; text-align: right; color: #8a6d1f; letter-spacing: .04em; }
+.invoice-doc .muted { color: #6b6249; font-size: .78rem; white-space: pre-line; }
 .invoice-doc table { width: 100%; border-collapse: collapse; margin: 14px 0 8px; }
-.invoice-doc th { text-align: left; font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: #5b6b7c; border-bottom: 2px solid #1a3a5c; padding: 6px 4px; }
-.invoice-doc td { padding: 8px 4px; border-bottom: 1px solid #e5eaf0; vertical-align: top; }
+.invoice-doc th { text-align: left; font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: #6b6249; border-bottom: 2px solid #8a6d1f; padding: 6px 4px; }
+.invoice-doc td { padding: 8px 4px; border-bottom: 1px solid #ece4cd; vertical-align: top; }
 .invoice-doc .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .invoice-doc .totals { margin-left: auto; width: 220px; max-width: 100%; }
 .invoice-doc .totals .kv { border: none; padding: 3px 0; }
-.invoice-doc .totals .grand { font-weight: 800; font-size: 1rem; border-top: 2px solid #1a3a5c; padding-top: 7px; margin-top: 4px; }
+.invoice-doc .totals .grand { font-weight: 800; font-size: 1rem; border-top: 2px solid #141110; padding-top: 7px; margin-top: 4px; }
 .invoice-doc .paid-stamp {
   display: inline-block; border: 3px solid #1e7d46; color: #1e7d46; padding: 3px 14px;
   border-radius: 8px; font-weight: 900; letter-spacing: .12em; transform: rotate(-6deg);

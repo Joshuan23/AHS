@@ -21,7 +21,7 @@
       invoices: [],
       expenses: [],
       settings: {
-        businessName: 'My Hauling Business',
+        businessName: 'Avery Hauling Services LLC',
         ownerName: '',
         phone: '',
         email: '',
@@ -533,6 +533,7 @@
 
     return '<div class="invoice-doc">' +
       '<div class="doc-head"><div>' +
+      '<img class="doc-logo" src="assets/badge.png" alt="">' +
       '<div class="biz-name">' + esc(s.businessName) + '</div>' +
       '<div class="muted">' + esc([s.ownerName, s.phone, s.email, s.address].filter(Boolean).join('\n')) + '</div>' +
       '</div><div>' +
@@ -856,7 +857,7 @@
       '<p style="font-size:.75rem;color:var(--text-2);margin-top:6px">Your data lives only on this device. Export a backup regularly and keep it somewhere safe (email it to yourself, save to cloud storage).</p>',
       function (m) {
         m.querySelector('#fSave').onclick = function () {
-          s.businessName = m.querySelector('#fBiz').value.trim() || 'My Hauling Business';
+          s.businessName = m.querySelector('#fBiz').value.trim() || 'Avery Hauling Services LLC';
           s.ownerName = m.querySelector('#fOwner').value.trim();
           s.phone = m.querySelector('#fPhone').value.trim();
           s.email = m.querySelector('#fEmail').value.trim();
@@ -943,7 +944,8 @@
   if (!db.customers.length && !db.invoices.length && !localStorage.getItem(STORE_KEY)) {
     save();
     setTimeout(function () {
-      openModal('Welcome to Hauler HQ! 🚛',
+      openModal('Welcome to Hauler HQ',
+        '<div style="text-align:center;margin-bottom:14px"><img src="assets/logo-full.png" alt="Avery Hauling Services LLC" style="max-width:220px;width:70%;height:auto"></div>' +
         '<p style="margin-bottom:10px;font-size:.92rem">Run your hauling business from your pocket:</p>' +
         '<ul style="margin:0 0 14px 20px;font-size:.88rem;color:var(--text-2)">' +
         '<li><strong>Customers</strong> — contacts, notes, call/text in one tap</li>' +

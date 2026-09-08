@@ -1,0 +1,189 @@
+//@version=5
+// =============================================================================
+// Alex G — "Set & Forget" Price-Action Strategy Indicator
+// =============================================================================
+// A practical, chart-ready implementation of the widely taught "set and forget"
+// swing-trading method popularised by trader Alex G:
+//
+//   • Trade WITH the higher-timeframe trend (never fight the tide).
+//   • Wait for price to pull back to a key support/resistance level.
+//   • Take a confirmation candle (engulfing or rejection/pin bar) AT the level.
+//   • Place your Entry, Stop Loss and a fixed risk:reward Take Profit...
+//   • ...then SET IT AND FORGET IT — no babysitting, no moving stops.
+//
+// What this indicator does for you:
+//   1. Reads trend bias from a configurable EMA (+ optional higher timeframe).
+//   2. Auto-detects support/resistance from swing pivots.
+//   3. Fires a BUY / SELL signal when price taps a level in line with the trend
+//      AND a valid confirmation candle forms.
+//   4. Auto-plots the Entry, Stop Loss and Take Profit levels + position size,
+//      so you can place the order and walk away.
+//   5. Ships ready-made alerts for hands-off automation.
+//
+// -----------------------------------------------------------------------------
+// NOT FINANCIAL ADVICE. This is an educational tool and an interpretation of a
+// publicly taught price-action approach — not the property of, or endorsed by,
+// any individual. Markets are risky. Backtest thoroughly and manage your own
+// risk. Never risk money you cannot afford to lose.
+// =============================================================================
+
+indicator("Alex G — Set & Forget", overlay = true, max_labels_count = 500, max_lines_count = 500, max_boxes_count = 500)
+
+// ---------------------------------------------------------------------------
+// Inputs
+// ---------------------------------------------------------------------------
+grpTrend   = "1 · Trend Bias"
+trendLen   = input.int(200,  "Trend EMA length",              minval = 1,   group = grpTrend, tooltip = "Bias is bullish above this EMA, bearish below. 200 = classic swing bias.")
+useHtf     = input.bool(true, "Confirm with higher timeframe", group = grpTrend, tooltip = "Only take longs when the higher timeframe is also bullish (and vice-versa).")
+htf        = input.timeframe("240", "Higher timeframe",        group = grpTrend)
+
+grpZone    = "2 · Support / Resistance"
+pivotLeft  = input.int(10,  "Pivot lookback (left)",  minval = 1, group = grpZone)
+pivotRight = input.int(10,  "Pivot lookback (right)", minval = 1, group = grpZone, tooltip = "Larger = fewer, stronger levels. This many bars must close before a pivot confirms.")
+zoneTolATR = input.float(0.5, "Level-tap tolerance (ATR ×)", minval = 0.0, step = 0.1, group = grpZone, tooltip = "How close price must get to a level to count as a 'tap'.")
+
+grpEntry   = "3 · Entry Confirmation"
+useEngulf  = input.bool(true, "Engulfing candle",         group = grpEntry)
+usePin     = input.bool(true, "Rejection / pin bar",      group = grpEntry)
+pinWickMlt = input.float(2.0, "Pin bar wick : body ratio", minval = 1.0, step = 0.1, group = grpEntry, tooltip = "Rejection wick must be at least this many times the candle body.")
+
+grpTrade   = "4 · Set & Forget Trade"
+rr         = input.float(2.0,  "Risk : Reward",              minval = 0.5, step = 0.5, group = grpTrade, tooltip = "Take Profit distance = Stop distance × this. 2.0 = risk 1 to make 2.")
+slBufATR   = input.float(0.5,  "Stop buffer (ATR ×)",        minval = 0.0, step = 0.1, group = grpTrade, tooltip = "Extra room beyond the swing so normal noise doesn't stop you out.")
+riskUsd    = input.float(100.0, "Risk per trade ($)",        minval = 0.0, group = grpTrade, tooltip = "Used to suggest a position size. 0 = hide size.")
+cooldown   = input.int(5,      "Min bars between signals",   minval = 0, group = grpTrade)
+
+grpUI      = "5 · Display"
+showBox    = input.bool(true, "Draw trade boxes",       group = grpUI)
+showDash   = input.bool(true, "Show dashboard",         group = grpUI)
+drawLen    = input.int(30,   "Trade box length (bars)", minval = 1, group = grpUI)
+colLong    = input.color(color.new(#00b894, 0), "Long colour",  group = grpUI)
+colShort   = input.color(color.new(#e17055, 0), "Short colour", group = grpUI)
+
+// ---------------------------------------------------------------------------
+// Core calculations
+// ---------------------------------------------------------------------------
+atr = ta.atr(14)
+
+// --- Trend bias -----------------------------------------------------------
+emaTrend = ta.ema(close, trendLen)
+htfClose = request.security(syminfo.tickerid, htf, close,               lookahead = barmerge.lookahead_off)
+htfEma   = request.security(syminfo.tickerid, htf, ta.ema(close, trendLen), lookahead = barmerge.lookahead_off)
+htfUp    = htfClose > htfEma
+htfDn    = htfClose < htfEma
+
+trendUp = close > emaTrend and (not useHtf or htfUp)
+trendDn = close < emaTrend and (not useHtf or htfDn)
+
+// --- Support / Resistance from swing pivots -------------------------------
+ph = ta.pivothigh(high, pivotLeft, pivotRight)
+pl = ta.pivotlow(low,  pivotLeft, pivotRight)
+
+var float support    = na
+var float resistance = na
+if not na(pl)
+    support := pl
+if not na(ph)
+    resistance := ph
+
+// --- Confirmation candles -------------------------------------------------
+bodyHi = math.max(open, close)
+bodyLo = math.min(open, close)
+body   = bodyHi - bodyLo
+upWick = high - bodyHi
+dnWick = bodyLo - low
+mid    = (high + low) / 2.0
+
+bullEngulf = useEngulf and close > open and close[1] < open[1] and close >= open[1] and open <= close[1]
+bearEngulf = useEngulf and close < open and close[1] > open[1] and close <= open[1] and open >= close[1]
+
+bullPin = usePin and dnWick > body * pinWickMlt and close > mid
+bearPin = usePin and upWick > body * pinWickMlt and close < mid
+
+bullConfirm = bullEngulf or bullPin
+bearConfirm = bearEngulf or bearPin
+
+// --- Level tap + signal ---------------------------------------------------
+tol           = atr * zoneTolATR
+tappedSupport = not na(support)    and low  <= support    + tol and close > support
+tappedResist  = not na(resistance) and high >= resistance - tol and close < resistance
+
+longRaw  = trendUp and tappedSupport and bullConfirm
+shortRaw = trendDn and tappedResist  and bearConfirm
+
+var int lastSig = -100000
+longOk  = longRaw  and (bar_index - lastSig) > cooldown
+shortOk = shortRaw and (bar_index - lastSig) > cooldown
+goLong  = longOk
+goShort = shortOk and not longOk   // if both trigger on one bar, favour the long
+
+// ---------------------------------------------------------------------------
+// Build the trade & draw it
+// ---------------------------------------------------------------------------
+f_drawTrade(_isLong, _entry, _sl, _tp, _col) =>
+    x1 = bar_index
+    x2 = bar_index + drawLen
+    if showBox
+        // reward zone (green) and risk zone (red)
+        box.new(x1, _isLong ? _tp : _entry, x2, _isLong ? _entry : _tp, border_color = color.new(color.green, 70), bgcolor = color.new(color.green, 88))
+        box.new(x1, _isLong ? _entry : _sl, x2, _isLong ? _sl : _entry, border_color = color.new(color.red,   70), bgcolor = color.new(color.red,   88))
+    line.new(x1, _entry, x2, _entry, color = color.gray,      style = line.style_dashed, width = 1)
+    line.new(x1, _sl,    x2, _sl,    color = color.red,       width = 1)
+    line.new(x1, _tp,    x2, _tp,    color = color.green,     width = 1)
+    risk = math.abs(_entry - _sl)
+    szTxt = (riskUsd > 0 and risk > 0) ? "  ·  size ≈ " + str.tostring(riskUsd / risk, "#.####") : ""
+    label.new(x1, _tp,    "TP " + str.tostring(_tp, format.mintick),    style = label.style_label_left, textcolor = color.white, color = color.new(color.green, 20), size = size.small)
+    label.new(x1, _sl,    "SL " + str.tostring(_sl, format.mintick),    style = label.style_label_left, textcolor = color.white, color = color.new(color.red,   20), size = size.small)
+    label.new(x1, _entry, (_isLong ? "BUY " : "SELL ") + str.tostring(_entry, format.mintick) + "  ·  R:R " + str.tostring(rr, "#.#") + szTxt, style = label.style_label_left, textcolor = color.white, color = _col, size = size.small)
+
+if goLong
+    entry = close
+    sl    = math.min(low, nz(support, low)) - atr * slBufATR
+    risk  = entry - sl
+    if risk > 0
+        tp = entry + risk * rr
+        f_drawTrade(true, entry, sl, tp, colLong)
+        lastSig := bar_index
+
+if goShort
+    entry = close
+    sl    = math.max(high, nz(resistance, high)) + atr * slBufATR
+    risk  = sl - entry
+    if risk > 0
+        tp = entry - risk * rr
+        f_drawTrade(false, entry, sl, tp, colShort)
+        lastSig := bar_index
+
+// ---------------------------------------------------------------------------
+// On-chart markers & bias visualisation
+// ---------------------------------------------------------------------------
+plot(emaTrend, "Trend EMA", color = trendUp ? color.new(colLong, 40) : trendDn ? color.new(colShort, 40) : color.gray, linewidth = 2)
+plotshape(goLong,  "Buy",  location = location.belowbar, style = shape.triangleup,   color = colLong,  size = size.small, text = "SET")
+plotshape(goShort, "Sell", location = location.abovebar, style = shape.triangledown, color = colShort, size = size.small, text = "SET")
+
+plot(support,    "Support",    color = color.new(color.teal, 40), style = plot.style_circles, linewidth = 1)
+plot(resistance, "Resistance", color = color.new(color.maroon, 40), style = plot.style_circles, linewidth = 1)
+
+// ---------------------------------------------------------------------------
+// Dashboard
+// ---------------------------------------------------------------------------
+var table dash = table.new(position.top_right, 2, 5, border_width = 1)
+if showDash and barstate.islast
+    biasTxt = trendUp ? "▲ BULLISH" : trendDn ? "▼ BEARISH" : "— NEUTRAL"
+    biasCol = trendUp ? colLong : trendDn ? colShort : color.gray
+    table.cell(dash, 0, 0, "Alex G · Set & Forget", text_color = color.white, bgcolor = color.new(color.black, 0), text_size = size.small)
+    table.cell(dash, 1, 0, "", bgcolor = color.new(color.black, 0))
+    table.cell(dash, 0, 1, "Bias",       text_color = color.gray, text_size = size.small)
+    table.cell(dash, 1, 1, biasTxt,      text_color = color.white, bgcolor = color.new(biasCol, 20), text_size = size.small)
+    table.cell(dash, 0, 2, "HTF (" + htf + ")", text_color = color.gray, text_size = size.small)
+    table.cell(dash, 1, 2, useHtf ? (htfUp ? "▲ up" : htfDn ? "▼ down" : "flat") : "off", text_color = color.white, text_size = size.small)
+    table.cell(dash, 0, 3, "Risk : Reward", text_color = color.gray, text_size = size.small)
+    table.cell(dash, 1, 3, "1 : " + str.tostring(rr, "#.#"), text_color = color.white, text_size = size.small)
+    table.cell(dash, 0, 4, "Risk / trade", text_color = color.gray, text_size = size.small)
+    table.cell(dash, 1, 4, riskUsd > 0 ? "$" + str.tostring(riskUsd, "#.##") : "—", text_color = color.white, text_size = size.small)
+
+// ---------------------------------------------------------------------------
+// Alerts (set once, fire forever — true "set and forget")
+// ---------------------------------------------------------------------------
+alertcondition(goLong,  "Set & Forget — BUY",  "Alex G Set & Forget BUY signal on {{ticker}} ({{interval}}) @ {{close}}")
+alertcondition(goShort, "Set & Forget — SELL", "Alex G Set & Forget SELL signal on {{ticker}} ({{interval}}) @ {{close}}")

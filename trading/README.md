@@ -79,6 +79,39 @@ levels shown, set your SL/TP, and forget it.
 - **Trade math:** `Stop = swing ± (ATR × buffer)`, `Risk = |Entry − Stop|`,
   `Take Profit = Entry ± Risk × R:R`, `Size ≈ $risk ÷ Risk`.
 
+## Scan the whole market at once 🔎
+
+`alex-g-scanner.pine` runs the same logic across a **watchlist of up to 12
+symbols** and shows a live table of which markets have a setup *right now*,
+plus **one alert** that fires when any of them triggers — so you don't have to
+flip through charts.
+
+**Install & use:**
+1. Paste `alex-g-scanner.pine` into the Pine Editor → **Save** → **Add to chart**.
+2. Set that chart to your trading timeframe (e.g. **4H**) — the scanner scans on
+   whatever timeframe the chart is.
+3. Open ⚙️ Settings → **Watchlist** and swap in the symbols you trade.
+4. Add **one alert**: Condition → `Alex G — Set & Forget Scanner` → *Scanner —
+   setup found* → Once per bar close.
+
+**Status column:**
+
+| Shows | Meaning |
+| --- | --- |
+| ▲ **BUY** | Confirmed long setup on that symbol |
+| ▼ **SELL** | Confirmed short setup |
+| • watch buy / sell | Price is at the level in-trend, waiting for the confirmation candle |
+| — | Nothing there |
+
+When a symbol lights up **BUY/SELL**, open *its* chart with the main
+`alex-g-set-and-forget.pine` indicator to read the exact Entry / Stop / Take
+Profit and size, then place it and forget it.
+
+> The scanner uses single-timeframe bias (Pine limits nested higher-timeframe
+> calls across many symbols). The main indicator still applies the full
+> higher-timeframe filter on the individual chart — always confirm there before
+> trading.
+
 ## A note on honesty
 
 No public indicator can perfectly reproduce a private, discretionary method, and

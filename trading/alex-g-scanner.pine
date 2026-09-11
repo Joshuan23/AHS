@@ -1,0 +1,114 @@
+//@version=5
+// =============================================================================
+// Alex G — "Set & Forget" MULTI-SYMBOL SCANNER
+// =============================================================================
+// Runs the Set & Forget logic across a watchlist of up to 12 symbols at once
+// and shows a live dashboard of which markets have a setup RIGHT NOW — plus a
+// single alert that fires when ANY symbol triggers. Add it to one chart, set
+// that chart to your trading timeframe (e.g. 4H), create ONE alert, and forget.
+//
+// Status meanings:
+//   ▲ BUY   — confirmed long  (trend up, tapped support, bullish confirm candle)
+//   ▼ SELL  — confirmed short (trend dn, tapped resistance, bearish confirm)
+//   • watch — price is at the level in-trend, waiting for a confirmation candle
+//   —       — nothing here
+//
+// NOTE: to stay within Pine's request.security() limits, the scanner uses
+// single-timeframe bias (no nested higher-TF call). Once a symbol lights up,
+// open its chart with the main "Alex G — Set & Forget" indicator to see the
+// exact Entry / Stop / Take-Profit and the higher-timeframe confirmation.
+//
+// NOT FINANCIAL ADVICE. Educational tool. Backtest and manage your own risk.
+// =============================================================================
+
+indicator("Alex G — Set & Forget Scanner", overlay = true)
+
+// --- Strategy inputs (kept in sync with the main indicator) ---------------
+trendLen   = input.int(200,  "Trend EMA length",             minval = 1,  group = "Strategy")
+pivotLeft  = input.int(10,   "Pivot lookback (left)",        minval = 1,  group = "Strategy")
+pivotRight = input.int(10,   "Pivot lookback (right)",       minval = 1,  group = "Strategy")
+zoneTolATR = input.float(0.5,"Level-tap tolerance (ATR ×)",  minval = 0.0, step = 0.1, group = "Strategy")
+pinWickMlt = input.float(2.0,"Pin bar wick : body ratio",    minval = 1.0, step = 0.1, group = "Strategy")
+
+// --- Watchlist (edit to taste) --------------------------------------------
+gS = "Watchlist"
+s1  = input.symbol("EURUSD", "01", group = gS)
+s2  = input.symbol("GBPUSD", "02", group = gS)
+s3  = input.symbol("USDJPY", "03", group = gS)
+s4  = input.symbol("AUDUSD", "04", group = gS)
+s5  = input.symbol("USDCAD", "05", group = gS)
+s6  = input.symbol("USDCHF", "06", group = gS)
+s7  = input.symbol("NZDUSD", "07", group = gS)
+s8  = input.symbol("EURGBP", "08", group = gS)
+s9  = input.symbol("GBPJPY", "09", group = gS)
+s10 = input.symbol("EURJPY", "10", group = gS)
+s11 = input.symbol("GBPCHF", "11", group = gS)
+s12 = input.symbol("XAUUSD", "12", group = gS)
+
+// --- The scan, evaluated in each symbol's own context ---------------------
+// Returns a status code: 2 BUY, 1 watch-long, 0 none, -1 watch-short, -2 SELL.
+f_scan() =>
+    ema = ta.ema(close, trendLen)
+    tUp = close > ema
+    tDn = close < ema
+    a   = ta.atr(14)
+    ph  = ta.pivothigh(high, pivotLeft, pivotRight)
+    pv  = ta.pivotlow(low,  pivotLeft, pivotRight)
+    var float sup = na
+    var float res = na
+    if not na(pv)
+        sup := pv
+    if not na(ph)
+        res := ph
+    bHi = math.max(open, close)
+    bLo = math.min(open, close)
+    bd  = bHi - bLo
+    uw  = high - bHi
+    dw  = bLo - low
+    md  = (high + low) / 2.0
+    bullEng = close > open and close[1] < open[1] and close >= open[1] and open <= close[1]
+    bearEng = close < open and close[1] > open[1] and close <= open[1] and open >= close[1]
+    bullPin = dw > bd * pinWickMlt and close > md
+    bearPin = uw > bd * pinWickMlt and close < md
+    bullConf = bullEng or bullPin
+    bearConf = bearEng or bearPin
+    tol  = a * zoneTolATR
+    tapS = not na(sup) and low  <= sup + tol and close > sup
+    tapR = not na(res) and high >= res - tol and close < res
+    code = tUp and tapS and bullConf ?  2.0 :
+           tDn and tapR and bearConf ? -2.0 :
+           tUp and tapS              ?  1.0 :
+           tDn and tapR              ? -1.0 : 0.0
+    code
+
+f_get(sym) => request.security(sym, timeframe.period, f_scan(), lookahead = barmerge.lookahead_off)
+
+c1  = f_get(s1),  c2  = f_get(s2),  c3  = f_get(s3),  c4  = f_get(s4)
+c5  = f_get(s5),  c6  = f_get(s6),  c7  = f_get(s7),  c8  = f_get(s8)
+c9  = f_get(s9),  c10 = f_get(s10), c11 = f_get(s11), c12 = f_get(s12)
+
+// --- Render the dashboard --------------------------------------------------
+f_txt(code) => code ==  2 ? "▲ BUY"       : code == -2 ? "▼ SELL"      :
+               code ==  1 ? "• watch buy" : code == -1 ? "• watch sell" : "—"
+f_col(code) => code ==  2 ? color.new(#00b894, 10) : code == -2 ? color.new(#e17055, 10) :
+               code ==  1 ? color.new(#00b894, 65) : code == -1 ? color.new(#e17055, 65) :
+               color.new(color.gray, 80)
+
+var table t = table.new(position.top_right, 2, 13, border_width = 1)
+if barstate.islast
+    table.cell(t, 0, 0, "Set & Forget Scanner", text_color = color.white, bgcolor = color.new(color.black, 0), text_size = size.small)
+    table.cell(t, 1, 0, timeframe.period,        text_color = color.white, bgcolor = color.new(color.black, 0), text_size = size.small)
+    syms  = array.from(s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12)
+    codes = array.from(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12)
+    for i = 0 to 11
+        code = array.get(codes, i)
+        raw  = array.get(syms, i)
+        name = str.contains(raw, ":") ? str.substring(raw, str.pos(raw, ":") + 1) : raw
+        table.cell(t, 0, i + 1, name,         text_color = color.white, text_size = size.small)
+        table.cell(t, 1, i + 1, f_txt(code),  text_color = color.white, bgcolor = f_col(code), text_size = size.small)
+
+// --- One alert to rule them all -------------------------------------------
+anySignal = math.abs(c1) == 2 or math.abs(c2) == 2 or math.abs(c3) == 2 or math.abs(c4) == 2 or
+            math.abs(c5) == 2 or math.abs(c6) == 2 or math.abs(c7) == 2 or math.abs(c8) == 2 or
+            math.abs(c9) == 2 or math.abs(c10) == 2 or math.abs(c11) == 2 or math.abs(c12) == 2
+alertcondition(anySignal, "Scanner — setup found", "Alex G Set & Forget: a BUY/SELL setup triggered on your watchlist ({{interval}}). Open the dashboard to see which pair.")

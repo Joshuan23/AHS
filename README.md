@@ -1,5 +1,7 @@
 # Hauler HQ 🚛
 
+> **New: [Jarvis](jarvis/)** — a standalone AI chief of staff you can talk to about anything. It researches, builds your business with you, and runs your sales pipeline. Lives at `/jarvis/`. See [jarvis/README.md](jarvis/README.md).
+
 A phone-first CRM, invoicing, and money-tracking app for a hauling business. No accounts, no monthly fees — everything runs in your browser and your data stays on your device.
 
 ## What it does

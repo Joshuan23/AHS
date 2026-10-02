@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#05080d">
+  <meta name="color-scheme" content="dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Jarvis</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand"><span class="brand-dot"></span>J.A.R.V.I.S.</div>
+      <div class="top-actions">
+        <button class="icon-btn" id="briefBtn" aria-label="Daily brief" title="Daily brief">☀️</button>
+        <button class="icon-btn" id="newChatBtn" aria-label="New conversation" title="New conversation">✚</button>
+        <button class="icon-btn" id="settingsBtn" aria-label="Settings" title="Settings">⚙️</button>
+      </div>
+    </header>
+
+    <main id="view" class="view"></main>
+
+    <nav class="bottomnav">
+      <button data-tab="chat" class="nav-btn active"><span class="nav-icon">💬</span><span>Jarvis</span></button>
+      <button data-tab="pipeline" class="nav-btn"><span class="nav-icon">🎯</span><span>Pipeline</span></button>
+      <button data-tab="tasks" class="nav-btn"><span class="nav-icon">✅</span><span>Tasks</span></button>
+      <button data-tab="docs" class="nav-btn"><span class="nav-icon">📄</span><span>Docs</span></button>
+    </nav>
+
+    <div class="modal-backdrop" id="modalBackdrop" hidden>
+      <div class="modal-sheet" id="modalSheet" role="dialog" aria-modal="true"></div>
+    </div>
+    <div id="toast" class="toast" hidden></div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator && location.protocol === 'https:') {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    }
+  </script>
+</body>
+</html>

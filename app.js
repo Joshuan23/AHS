@@ -30,7 +30,14 @@
         nextInvoiceNum: 1,
         taxRate: 0,
         paymentTerms: 14,
-        paymentInstructions: ''
+        paymentInstructions: '',
+        jarvisVoice: 'on',
+        jarvisAutoBrief: 'on',
+        weatherPlace: '',
+        weatherLat: '',
+        weatherLon: '',
+        lastBackup: '',
+        lastBriefDate: ''
       }
     };
   }
@@ -154,14 +161,15 @@
       if (subView.type === 'invoice') return renderInvoiceDetail(subView.id);
       if (subView.type === 'job') return renderJobDetail(subView.id);
     }
-    fab.hidden = currentTab === 'dashboard';
-    var titles = { dashboard: db.settings.businessName || 'Hauler HQ', customers: 'Customers', jobs: 'Jobs', invoices: 'Invoices', money: 'Money' };
+    fab.hidden = currentTab === 'dashboard' || currentTab === 'jarvis';
+    var titles = { dashboard: db.settings.businessName || 'Hauler HQ', customers: 'Customers', jobs: 'Jobs', invoices: 'Invoices', money: 'Money', jarvis: 'Jarvis' };
     titleEl.textContent = titles[currentTab];
     if (currentTab === 'dashboard') renderDashboard();
     else if (currentTab === 'customers') renderCustomers();
     else if (currentTab === 'jobs') renderJobs();
     else if (currentTab === 'invoices') renderInvoices();
     else if (currentTab === 'money') renderMoney();
+    else if (currentTab === 'jarvis') renderJarvis();
   }
 
   function setTab(tab) {
@@ -210,7 +218,9 @@
       return (b.issueDate || '').localeCompare(a.issueDate || '');
     }).slice(0, 4);
 
-    var html = '<div class="stat-grid">' +
+    var html = '<button class="jv-card" data-act="jarvis"><span class="jv-orb mini"><span></span></span>' +
+      '<span><strong>Ask Jarvis</strong><br><small>' + (db.settings.lastBriefDate === todayStr() ? 'Talk to me, or replay today\'s brief' : 'Your daily brief is ready') + '</small></span><span class="jv-go">›</span></button>';
+    html += '<div class="stat-grid">' +
       stat('Collected this month', money(paidThisMonth), 'good') +
       stat('Outstanding', money(outstanding), outstanding > 0 ? 'warn' : '') +
       stat('Overdue', money(overdueAmt), overdueCount ? 'bad' : '', overdueCount ? overdueCount + ' invoice' + (overdueCount > 1 ? 's' : '') : 'Nothing overdue') +
@@ -242,6 +252,7 @@
         if (a === 'newJob') jobForm();
         if (a === 'newCustomer') customerForm();
         if (a === 'newExpense') expenseForm();
+        if (a === 'jarvis') setTab('jarvis');
       };
     });
     bindRows();
@@ -847,6 +858,14 @@
       field('Payment terms (days)', 'number', 'fTerms', s.paymentTerms) +
       '</div>' +
       fieldArea('Payment instructions (shows on invoices)', 'fPay', s.paymentInstructions, 'e.g. Zelle to 555-123-4567, checks payable to…') +
+      '<div class="section-title">Jarvis</div>' +
+      '<div class="field"><label for="fPlace">Weather location (town or ZIP)</label><div class="field-row">' +
+      '<input type="text" id="fPlace" value="' + esc(s.weatherPlace) + '" placeholder="e.g. Tulsa, OK or 74103">' +
+      '<button type="button" class="btn small secondary" id="fLocate">📍 Use mine</button></div></div>' +
+      '<div class="field-row">' +
+      selectField('Jarvis voice', 'fVoice', [['on', 'Speak out loud'], ['off', 'Text only']], s.jarvisVoice) +
+      selectField('Daily brief', 'fAutoBrief', [['on', 'Open on first launch each day'], ['off', 'Only when I ask']], s.jarvisAutoBrief) +
+      '</div>' +
       '<button class="btn primary" id="fSave">Save Settings</button>' +
       '<div class="section-title">Backup &amp; restore</div>' +
       '<div class="btn-row">' +
@@ -867,7 +886,30 @@
           s.taxRate = Number(m.querySelector('#fTax').value) || 0;
           s.paymentTerms = Number(m.querySelector('#fTerms').value) || 14;
           s.paymentInstructions = m.querySelector('#fPay').value.trim();
-          save(); closeModal(); render(); toast('Settings saved');
+          s.jarvisVoice = m.querySelector('#fVoice').value;
+          s.jarvisAutoBrief = m.querySelector('#fAutoBrief').value;
+          var place = m.querySelector('#fPlace').value.trim();
+          var saveBtn = m.querySelector('#fSave');
+          function done() { save(); closeModal(); render(); toast('Settings saved'); }
+          if (place === s.weatherPlace || place === (s.weatherPlace || '').split(' (')[0]) return done();
+          if (!place) { s.weatherPlace = ''; s.weatherLat = ''; s.weatherLon = ''; return done(); }
+          saveBtn.textContent = 'Finding ' + place + '…';
+          geocode(place).then(function (loc) {
+            if (!loc) { saveBtn.textContent = 'Save Settings'; toast('Couldn\'t find that location — try a ZIP code'); return; }
+            s.weatherPlace = loc.name; s.weatherLat = loc.lat; s.weatherLon = loc.lon;
+            done();
+          });
+        };
+        m.querySelector('#fLocate').onclick = function () {
+          if (!navigator.geolocation) { toast('Location isn\'t available on this device'); return; }
+          toast('Getting your location…');
+          navigator.geolocation.getCurrentPosition(function (pos) {
+            s.weatherLat = Math.round(pos.coords.latitude * 100) / 100;
+            s.weatherLon = Math.round(pos.coords.longitude * 100) / 100;
+            s.weatherPlace = 'My location';
+            m.querySelector('#fPlace').value = 'My location';
+            save(); toast('Location saved for weather');
+          }, function () { toast('Location permission denied — type a town or ZIP instead'); }, { timeout: 10000 });
         };
         m.querySelector('#fExport').onclick = function () {
           var blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
@@ -876,6 +918,7 @@
           a.download = 'haulerhq-backup-' + todayStr() + '.json';
           a.click();
           URL.revokeObjectURL(a.href);
+          s.lastBackup = todayStr(); save();
           toast('Backup downloaded');
         };
         var fileInput = m.querySelector('#fImportFile');
@@ -940,6 +983,521 @@
     });
   }
 
+  // ---------- Jarvis: voice assistant & daily brief ----------
+  var jarvisLog = [];           // [{from:'jarvis'|'me', html:string}]
+  var jarvisUndo = null;        // last voice-logged expense id
+  var jarvisListening = false;
+  var jarvisLastBrief = null;
+  var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var WEATHER_KEY = 'haulerhq_weather';
+
+  function daysBetween(a, b) {
+    return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000);
+  }
+  function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
+  function spokenMoney(n) {
+    n = Number(n) || 0;
+    var whole = Math.round(n);
+    return Math.abs(n - whole) < 0.005 ? '$' + whole.toLocaleString('en-US') : money(n);
+  }
+  function jobsOn(dateStr) {
+    return db.jobs.filter(function (j) {
+      return j.date === dateStr && (j.status === 'scheduled' || j.status === 'in-progress');
+    });
+  }
+  function openInvoices() {
+    return db.invoices.filter(function (i) { var st = invoiceStatus(i); return st === 'sent' || st === 'overdue'; });
+  }
+  function overdueInvoices() {
+    return db.invoices.filter(function (i) { return invoiceStatus(i) === 'overdue'; })
+      .sort(function (a, b) { return invoiceTotal(b) - invoiceTotal(a); });
+  }
+  function uninvoicedJobs() {
+    return db.jobs.filter(function (j) { return j.status === 'completed'; });
+  }
+  function missedJobs() {
+    var t = todayStr();
+    return db.jobs.filter(function (j) { return j.status === 'scheduled' && j.date && j.date < t; });
+  }
+  function incomeBetween(from, to) {
+    return db.invoices.filter(function (i) { return i.status === 'paid' && i.paidDate >= from && i.paidDate <= to; })
+      .reduce(function (s, i) { return s + invoiceTotal(i); }, 0);
+  }
+  function expensesBetween(from, to) {
+    return db.expenses.filter(function (e) { return e.date >= from && e.date <= to; })
+      .reduce(function (s, e) { return s + (Number(e.amount) || 0); }, 0);
+  }
+  function periodRange(text) {
+    var t = todayStr(), d = new Date();
+    if (/last month/.test(text)) {
+      var lm = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+      var end = new Date(d.getFullYear(), d.getMonth(), 0);
+      return { label: 'last month', from: lm.getFullYear() + '-' + pad(lm.getMonth() + 1) + '-01', to: end.getFullYear() + '-' + pad(end.getMonth() + 1) + '-' + pad(end.getDate()) };
+    }
+    if (/year|ytd/.test(text)) return { label: 'this year', from: t.slice(0, 4) + '-01-01', to: t };
+    if (/week/.test(text)) return { label: 'the last 7 days', from: addDays(t, -6), to: t };
+    if (/today/.test(text)) return { label: 'today', from: t, to: t };
+    if (/all time|ever|total/.test(text)) return { label: 'all time', from: '0000-01-01', to: '9999-12-31' };
+    return { label: 'this month', from: t.slice(0, 8) + '01', to: t };
+  }
+  function jobLine(j) {
+    var where = j.origin ? ' at ' + j.origin + (j.destination ? ' → ' + j.destination : '') : '';
+    return customerName(j.customerId) + ' — ' + (j.description || 'Haul') + where + (j.amount ? ' (' + money(j.amount) + ')' : '');
+  }
+  function jobSpoken(j) {
+    return customerName(j.customerId) + ', ' + (j.description || 'a haul') + (j.origin ? ' at ' + j.origin : '');
+  }
+
+  // --- Weather (Open-Meteo, free, no key) ---
+  var WMO = { 0: 'clear skies', 1: 'mostly clear', 2: 'partly cloudy', 3: 'overcast', 45: 'fog', 48: 'freezing fog',
+    51: 'light drizzle', 53: 'drizzle', 55: 'heavy drizzle', 56: 'freezing drizzle', 57: 'freezing drizzle',
+    61: 'light rain', 63: 'rain', 65: 'heavy rain', 66: 'freezing rain', 67: 'freezing rain',
+    71: 'light snow', 73: 'snow', 75: 'heavy snow', 77: 'snow grains', 80: 'rain showers', 81: 'rain showers',
+    82: 'violent rain showers', 85: 'snow showers', 86: 'heavy snow showers', 95: 'thunderstorms', 96: 'thunderstorms with hail', 99: 'thunderstorms with hail' };
+
+  function geocode(place) {
+    var zip = /^\d{5}$/.test(place);
+    var url = 'https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&format=json&name=' +
+      encodeURIComponent(zip ? place : place.split(',')[0].trim()) + (zip ? '&countryCode=US' : '');
+    return fetch(url).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      var r = d && d.results && d.results[0];
+      if (!r) return null;
+      return { name: r.name + (r.admin1 ? ', ' + r.admin1 : '') + (zip ? ' (' + place + ')' : ''), lat: r.latitude, lon: r.longitude };
+    }).catch(function () { return null; });
+  }
+
+  function getWeather() {
+    var s = db.settings;
+    if (s.weatherLat == null || s.weatherLon == null || s.weatherLat === '') return Promise.resolve(null);
+    var key = todayStr() + '|' + s.weatherLat + ',' + s.weatherLon;
+    try {
+      var cached = JSON.parse(localStorage.getItem(WEATHER_KEY) || 'null');
+      if (cached && cached.key === key && Date.now() - cached.at < 3 * 3600 * 1000) return Promise.resolve(cached.data);
+    } catch (e) {}
+    var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + s.weatherLat + '&longitude=' + s.weatherLon +
+      '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max' +
+      '&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=3';
+    return fetch(url).then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
+      if (!data || !data.daily) return null;
+      var d = data.daily, days = [];
+      for (var i = 0; i < d.time.length; i++) {
+        days.push({ date: d.time[i], code: d.weather_code[i], hi: Math.round(d.temperature_2m_max[i]), lo: Math.round(d.temperature_2m_min[i]),
+          rain: d.precipitation_probability_max[i] || 0, wind: Math.round(d.wind_speed_10m_max[i]), gust: Math.round(d.wind_gusts_10m_max[i]) });
+      }
+      try { localStorage.setItem(WEATHER_KEY, JSON.stringify({ key: key, at: Date.now(), data: days })); } catch (e) {}
+      return days;
+    }).catch(function () { return null; });
+  }
+  function weatherAlerts(w) {
+    var a = [];
+    if (w.code >= 95) a.push('Thunderstorms expected — avoid open-bed loads and plan around lightning.');
+    else if (w.rain >= 50) a.push(w.rain + '% chance of rain — bring tarps and straps, and expect slow dump-site traffic.');
+    if (w.gust >= 35 || w.wind >= 25) a.push('Gusts to ' + w.gust + ' mph — secure loose debris and tarp everything.');
+    if (w.hi >= 95) a.push('Heat at ' + w.hi + '° — pack extra water and take breaks.');
+    if (w.lo <= 32 || [56, 57, 66, 67, 71, 73, 75, 77, 85, 86].indexOf(w.code) >= 0) a.push('Freezing conditions — watch for ice on ramps and the trailer deck.');
+    return a;
+  }
+  function weatherSentence(w, place) {
+    return (place ? place + ': ' : '') + (WMO[w.code] || 'mixed conditions') + ', high of ' + w.hi + '°, low of ' + w.lo + '°' +
+      (w.rain ? ', ' + w.rain + '% chance of rain' : '') + ', wind up to ' + w.wind + ' mph.';
+  }
+
+  // --- The daily brief ---
+  function buildBrief() {
+    return getWeather().then(function (wx) {
+      var s = db.settings, t = todayStr(), now = new Date();
+      var hr = now.getHours();
+      var greet = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
+      var who = s.ownerName ? ', ' + s.ownerName.split(' ')[0] : '';
+      var dateLong = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+      var sections = [], speech = [greet + who + '. Here is your brief for ' + dateLong + '.'];
+      var priorities = [];
+
+      var today = jobsOn(t).sort(function (a, b) { return (a.status === 'in-progress' ? -1 : 0) - (b.status === 'in-progress' ? -1 : 0); });
+      var tomorrow = jobsOn(addDays(t, 1));
+      var missed = missedJobs();
+      var overdue = overdueInvoices();
+      var dueSoon = db.invoices.filter(function (i) { return i.status === 'sent' && i.dueDate >= t && i.dueDate <= addDays(t, 3); });
+      var drafts = db.invoices.filter(function (i) { return i.status === 'draft'; });
+      var unbilled = uninvoicedJobs();
+      var unbilledAmt = unbilled.reduce(function (sum, j) { return sum + (Number(j.amount) || 0); }, 0);
+      var overdueAmt = overdue.reduce(function (sum, i) { return sum + invoiceTotal(i); }, 0);
+      var outstanding = openInvoices().reduce(function (sum, i) { return sum + invoiceTotal(i); }, 0);
+
+      // Priorities first — what actually needs doing today
+      if (missed.length) priorities.push('Close out or reschedule ' + plural(missed.length, 'past-due job') + '.');
+      if (today.length) priorities.push('Run ' + plural(today.length, 'job') + ' on today\'s schedule.');
+      if (unbilled.length) priorities.push('Invoice ' + plural(unbilled.length, 'finished job') + ' — ' + money(unbilledAmt) + ' not billed yet.');
+      if (overdue.length) priorities.push('Chase ' + money(overdueAmt) + ' in overdue payments, starting with ' + customerName(overdue[0].customerId) + '.');
+      if (drafts.length) priorities.push('Send ' + plural(drafts.length, 'draft invoice') + ' sitting unsent.');
+      if (!priorities.length) priorities.push('Nothing urgent. Good day to line up new work.');
+      sections.push({ icon: '🎯', title: 'Top priorities', tone: 'accent', lines: priorities.slice(0, 4) });
+      speech.push('Your top priorities: ' + priorities.slice(0, 3).join(' '));
+
+      // Weather
+      if (wx && wx[0]) {
+        var alerts = weatherAlerts(wx[0]);
+        var wl = [weatherSentence(wx[0], s.weatherPlace)].concat(alerts);
+        if (wx[1]) wl.push('Tomorrow: ' + (WMO[wx[1].code] || 'mixed') + ', ' + wx[1].hi + '°/' + wx[1].lo + '°' + (wx[1].rain >= 40 ? ', ' + wx[1].rain + '% rain' : '') + '.');
+        sections.push({ icon: '🌤️', title: 'Weather on the road', tone: alerts.length ? 'warn' : '', lines: wl });
+        speech.push('Weather: ' + weatherSentence(wx[0]) + ' ' + alerts.join(' '));
+      } else {
+        sections.push({ icon: '🌤️', title: 'Weather', tone: '', lines: [s.weatherLat == null || s.weatherLat === '' ?
+          'Set your town or ZIP in ⚙️ Settings → Jarvis and I\'ll include road weather and rain/wind alerts.' :
+          'Couldn\'t reach the weather service — check your connection.'] });
+      }
+
+      // Schedule
+      var sched = today.length ? today.map(function (j) { return (j.status === 'in-progress' ? '▶️ In progress: ' : '') + jobLine(j); })
+        : ['No jobs on the books for today.'];
+      sections.push({ icon: '🚚', title: 'Today\'s schedule', tone: '', lines: sched });
+      speech.push(today.length ? 'You have ' + plural(today.length, 'job') + ' today: ' + today.map(jobSpoken).join('; ') + '.' : 'No jobs scheduled today.');
+      if (missed.length) {
+        sections.push({ icon: '⚠️', title: 'Past-due jobs', tone: 'bad', lines: missed.map(function (j) { return fmtDate(j.date) + ' · ' + jobLine(j) + ' — still marked scheduled'; }) });
+        speech.push(plural(missed.length, 'job') + ' from earlier dates ' + (missed.length === 1 ? 'is' : 'are') + ' still marked scheduled.');
+      }
+      var weekCount = db.jobs.filter(function (j) { return (j.status === 'scheduled') && j.date > t && j.date <= addDays(t, 7); }).length;
+      var ahead = [tomorrow.length ? 'Tomorrow: ' + tomorrow.map(jobLine).join('; ') : 'Tomorrow: nothing booked yet.',
+        'Next 7 days: ' + plural(weekCount, 'job') + ' booked.'];
+      if (!weekCount) {
+        var lapsed = db.customers.map(function (c) {
+          var last = db.jobs.filter(function (j) { return j.customerId === c.id; }).map(function (j) { return j.date || ''; }).sort().pop();
+          return { c: c, last: last };
+        }).filter(function (x) { return x.last && daysBetween(x.last, t) >= 45; })
+          .sort(function (a, b) { return a.last.localeCompare(b.last); }).slice(0, 3);
+        ahead.push('Your week is open — ' + (lapsed.length ? 'consider reaching out to past customers: ' + lapsed.map(function (x) { return x.c.name; }).join(', ') + '.' : 'a good time to drum up new business.'));
+      }
+      sections.push({ icon: '📅', title: 'Looking ahead', tone: weekCount ? '' : 'warn', lines: ahead });
+      speech.push(tomorrow.length ? plural(tomorrow.length, 'job') + ' tomorrow.' : 'Nothing booked tomorrow yet.');
+
+      // Collections
+      var coll = [];
+      overdue.forEach(function (i) {
+        var c = getCustomer(i.customerId);
+        coll.push('🔴 ' + i.number + ' · ' + customerName(i.customerId) + ' owes ' + money(invoiceTotal(i)) + ' — ' + plural(daysBetween(i.dueDate, t), 'day') + ' late' + (c && c.phone ? ' (' + c.phone + ')' : ''));
+      });
+      dueSoon.forEach(function (i) { coll.push('🟡 ' + i.number + ' · ' + customerName(i.customerId) + ' — ' + money(invoiceTotal(i)) + ' due ' + fmtDate(i.dueDate)); });
+      if (drafts.length) coll.push('📝 ' + plural(drafts.length, 'draft invoice') + ' not sent yet (' + money(drafts.reduce(function (sum, i) { return sum + invoiceTotal(i); }, 0)) + ').');
+      if (unbilled.length) coll.push('🧾 ' + plural(unbilled.length, 'completed job') + ' not invoiced: ' + unbilled.map(function (j) { return customerName(j.customerId); }).join(', ') + ' — ' + money(unbilledAmt) + '.');
+      if (!coll.length) coll.push('Everyone\'s paid up. Nothing to chase. 👍');
+      sections.push({ icon: '💵', title: 'Money to collect · ' + money(outstanding) + ' outstanding', tone: overdue.length ? 'bad' : '', lines: coll });
+      speech.push(overdue.length ? 'You have ' + spokenMoney(overdueAmt) + ' overdue across ' + plural(overdue.length, 'invoice') + '. The biggest is ' + customerName(overdue[0].customerId) + ' at ' + spokenMoney(invoiceTotal(overdue[0])) + '.' : 'Nothing overdue.');
+      if (unbilled.length) speech.push(spokenMoney(unbilledAmt) + ' in finished work hasn\'t been invoiced.');
+
+      // Money snapshot vs same point last month
+      var mStart = t.slice(0, 8) + '01';
+      var inc = incomeBetween(mStart, t), exp = expensesBetween(mStart, t);
+      var lmD = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      var lmStart = lmD.getFullYear() + '-' + pad(lmD.getMonth() + 1) + '-01';
+      var lmEndDay = Math.min(now.getDate(), new Date(now.getFullYear(), now.getMonth(), 0).getDate());
+      var lmTo = lmStart.slice(0, 8) + pad(lmEndDay);
+      var lmInc = incomeBetween(lmStart, lmTo), lmExp = expensesBetween(lmStart, lmTo);
+      var profit = inc - exp, lmProfit = lmInc - lmExp;
+      var trend = lmProfit === 0 && profit === 0 ? '' : profit >= lmProfit ? '▲ ' + money(profit - lmProfit) + ' ahead of this point last month' : '▼ ' + money(lmProfit - profit) + ' behind this point last month';
+      var fuel = db.expenses.filter(function (e) { return e.category === 'Fuel' && e.date >= mStart; }).reduce(function (sum, e) { return sum + (Number(e.amount) || 0); }, 0);
+      var ml = ['Collected ' + money(inc) + ' · Expenses ' + money(exp) + ' · Profit ' + money(profit)];
+      if (trend) ml.push(trend + '.');
+      if (inc > 0 && exp / inc > 0.6) ml.push('Expenses are ' + Math.round(exp / inc * 100) + '% of income this month — keep an eye on costs.');
+      if (fuel) ml.push('Fuel so far: ' + money(fuel) + '.');
+      sections.push({ icon: '📈', title: 'This month', tone: profit < 0 ? 'bad' : 'good', lines: ml });
+      speech.push('This month you\'ve collected ' + spokenMoney(inc) + ', spent ' + spokenMoney(exp) + ', for a profit of ' + spokenMoney(profit) + '.');
+
+      // Housekeeping — the stuff that bites later
+      var hk = [];
+      var lastBackup = s.lastBackup;
+      if (!lastBackup || daysBetween(lastBackup, t) >= 7) hk.push('Back up your data — ' + (lastBackup ? 'last backup was ' + plural(daysBetween(lastBackup, t), 'day') + ' ago' : 'you haven\'t made one yet') + '. ⚙️ Settings → Export Backup.');
+      if (!s.paymentInstructions) hk.push('Add payment instructions (Zelle, Cash App, checks…) in Settings so invoices tell customers how to pay.');
+      if (!s.phone) hk.push('Add your business phone in Settings so it prints on invoices.');
+      var noContact = db.customers.filter(function (c) { return !c.phone && !c.email; });
+      if (noContact.length) hk.push(plural(noContact.length, 'customer') + ' with no phone or email: ' + noContact.slice(0, 3).map(function (c) { return c.name; }).join(', ') + '.');
+      if (now.getDate() >= 25) hk.push('Month-end is close — log any missing fuel and dump receipts so your numbers are right.');
+      if ([0, 3, 5, 8].indexOf(now.getMonth()) >= 0 && now.getDate() <= 15) hk.push('Quarterly estimated taxes are due mid-month — check with your accountant.');
+      if (hk.length) {
+        sections.push({ icon: '🧰', title: 'Housekeeping', tone: '', lines: hk });
+        speech.push('And ' + plural(hk.length, 'housekeeping item') + (hk.length === 1 ? ' is' : ' are') + ' on the list.');
+      }
+      speech.push('That\'s everything. Have a safe day on the road.');
+      return { sections: sections, speech: speech.join(' ') };
+    });
+  }
+
+  function briefHtml(b) {
+    return '<div class="brief">' + b.sections.map(function (sec) {
+      return '<div class="brief-sec ' + (sec.tone || '') + '"><div class="brief-head"><span>' + sec.icon + '</span>' + esc(sec.title) + '</div><ul>' +
+        sec.lines.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul></div>';
+    }).join('') + '</div>';
+  }
+
+  // --- Speech out ---
+  function pickVoice() {
+    if (!window.speechSynthesis) return null;
+    var voices = speechSynthesis.getVoices();
+    var prefs = [/Daniel/i, /Google UK English Male/i, /en-GB/i, /Alex/i, /en-US/i];
+    for (var p = 0; p < prefs.length; p++) {
+      for (var v = 0; v < voices.length; v++) {
+        if (prefs[p].test(voices[v].name) || prefs[p].test(voices[v].lang)) return voices[v];
+      }
+    }
+    return voices[0] || null;
+  }
+  // Chrome loads voices async; touching getVoices() early primes the list.
+  if (window.speechSynthesis) speechSynthesis.getVoices();
+  function speak(text) {
+    if (!window.speechSynthesis || db.settings.jarvisVoice === 'off') return;
+    speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(text.replace(/[•·→—]/g, ', ').replace(/[^\x00-\x7F°$]/g, ''));
+    var v = pickVoice();
+    if (v) { u.voice = v; u.lang = v.lang; }
+    u.rate = 1.03; u.pitch = 0.95;
+    u.onstart = function () { setOrb('speaking'); };
+    u.onend = u.onerror = function () { setOrb(jarvisListening ? 'listening' : ''); };
+    speechSynthesis.speak(u);
+  }
+  function setOrb(state) {
+    var orb = document.getElementById('jvOrb');
+    if (orb) orb.className = 'jv-orb ' + (state || '');
+    var st = document.getElementById('jvStatus');
+    if (st) st.textContent = state === 'listening' ? 'Listening…' : state === 'speaking' ? 'Speaking — tap the orb to stop' : state === 'thinking' ? 'Thinking…' : 'Tap 🎙️ and talk, or type below';
+  }
+
+  // --- Conversation ---
+  function say(html, speech) {
+    jarvisLog.push({ from: 'jarvis', html: html });
+    if (currentTab === 'jarvis' && !subView) renderJarvisLog();
+    if (speech) speak(speech);
+  }
+  function list(items) { return '<ul class="jv-list">' + items.map(function (i) { return '<li>' + esc(i) + '</li>'; }).join('') + '</ul>'; }
+
+  function findCustomer(text) {
+    var best = null;
+    db.customers.forEach(function (c) {
+      var name = c.name.toLowerCase();
+      var first = name.split(' ')[0];
+      if (text.indexOf(name) >= 0 && (!best || name.length > best.name.length)) best = c;
+      else if (!best && first.length > 2 && new RegExp('\\b' + first.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(text)) best = c;
+    });
+    return best;
+  }
+
+  function runBrief() {
+    setOrb('thinking');
+    buildBrief().then(function (b) {
+      db.settings.lastBriefDate = todayStr(); save();
+      say(briefHtml(b) + '<div class="btn-row"><button class="btn small secondary" data-jv="replay">🔊 Read it again</button></div>', b.speech);
+      jarvisLastBrief = b;
+      if (!(window.speechSynthesis && db.settings.jarvisVoice !== 'off')) setOrb('');
+    });
+  }
+  function handle(raw) {
+    var text = String(raw || '').trim();
+    if (!text) return;
+    jarvisLog.push({ from: 'me', html: esc(text) });
+    renderJarvisLog();
+    var q = text.toLowerCase().replace(/[?!.,]/g, '');
+    var t = todayStr();
+
+    if (/^(stop|quiet|shut up|be quiet|cancel|enough)\b/.test(q)) { if (window.speechSynthesis) speechSynthesis.cancel(); setOrb(''); return say('Standing by.'); }
+    if (/^(undo|undo that|remove that|delete that)$/.test(q)) {
+      if (!jarvisUndo) return say('There\'s nothing for me to undo.', 'There is nothing to undo.');
+      db.expenses = db.expenses.filter(function (e) { return e.id !== jarvisUndo; }); jarvisUndo = null; save();
+      return say('Done — I removed that expense.', 'Done. I removed that expense.');
+    }
+    if (/\b(brief|briefing|rundown|run down|morning report|catch me up|what do i need|what did i miss|update me|sitrep)\b/.test(q)) return runBrief();
+    if (/\b(help|what can you do|commands)\b/.test(q)) {
+      return say('Here\'s what you can ask me:' + list(['“Give me my daily brief”', '“What\'s on today?” / “What about tomorrow?” / “This week?”', '“Who owes me money?”', '“What haven\'t I invoiced?”', '“How much did I make this month?” (or last month, this year)', '“What did I spend on fuel this month?”', '“Log 60 dollars fuel” — then “undo” if I got it wrong', '“Tell me about Mike Jones” / “Call Mike”', '“What\'s the weather?”', '“Open invoices” / “Go to jobs”']),
+        'I can give you your daily brief, your schedule, who owes you, what you made and spent, the weather, look up customers, and log expenses by voice. Just ask.');
+    }
+    if (/\b(hi|hello|hey|yo|good morning|good afternoon|good evening)\b/.test(q) && q.split(' ').length <= 4) {
+      var name = db.settings.ownerName ? ' ' + db.settings.ownerName.split(' ')[0] : '';
+      return say('Hey' + esc(name) + '. Want your daily brief? Just say “brief”.', 'Hey' + name + '. Want your daily brief?');
+    }
+    if (/\b(thanks|thank you|appreciate)\b/.test(q)) return say('Anytime. 🫡', 'Anytime.');
+
+    // Voice expense logging: "log 45 fuel", "spent $120 on dump fees"
+    var exp = q.match(/\b(log|add|record|spent|paid)\b.*?\$?\s*(\d+(?:\.\d{1,2})?)\s*(dollars|bucks)?/);
+    if (exp && !/\b(how much|what did)\b/.test(q)) {
+      var amt = Number(exp[2]);
+      var cat = /fuel|gas|diesel/.test(q) ? 'Fuel' : /dump|disposal|landfill|tipping/.test(q) ? 'Dump/Disposal Fees' : /repair|maintenance|oil|tire|brake|mechanic/.test(q) ? 'Maintenance & Repairs'
+        : /insurance/.test(q) ? 'Insurance' : /permit|fee|license|registration|toll/.test(q) ? 'Permits & Fees' : /labor|helper|crew|wage/.test(q) ? 'Labor'
+        : /truck payment|loan|note/.test(q) ? 'Truck Payment' : /equipment|strap|tarp|dolly|tool/.test(q) ? 'Equipment' : 'Other';
+      var e = { id: uid(), date: t, amount: amt, category: cat, description: text };
+      db.expenses.push(e); jarvisUndo = e.id; save();
+      return say('Logged <strong>' + money(amt) + '</strong> under <strong>' + esc(cat) + '</strong> for today. Say “undo” if that\'s wrong.',
+        'Logged ' + spokenMoney(amt) + ' under ' + cat + '. Say undo if that is wrong.');
+    }
+
+    if (/\b(weather|rain|forecast|temperature|wind|snow|hot|cold outside)\b/.test(q)) {
+      setOrb('thinking');
+      return getWeather().then(function (wx) {
+        if (!wx) return say('I don\'t have a location for weather yet. Open ⚙️ Settings → Jarvis and enter your town or ZIP.', 'I need your town or zip code first. You can set it in settings.');
+        var day = /tomorrow/.test(q) && wx[1] ? wx[1] : wx[0];
+        var alerts = weatherAlerts(day);
+        say(esc((day === wx[1] ? 'Tomorrow — ' : 'Today — ') + weatherSentence(day, db.settings.weatherPlace)) + (alerts.length ? list(alerts) : ''),
+          (day === wx[1] ? 'Tomorrow: ' : 'Today: ') + weatherSentence(day) + ' ' + alerts.join(' '));
+      });
+    }
+
+    if (/\b(owe|owes|owed|overdue|outstanding|unpaid|collect|late|receivable)\b/.test(q)) {
+      var od = overdueInvoices(), open = openInvoices();
+      if (!open.length) return say('Nobody owes you anything right now. 👍', 'Nobody owes you anything right now.');
+      var total = open.reduce(function (s, i) { return s + invoiceTotal(i); }, 0);
+      var rows = open.sort(function (a, b) { return (a.dueDate || '').localeCompare(b.dueDate || ''); }).map(function (i) {
+        var st = invoiceStatus(i);
+        return (st === 'overdue' ? '🔴 ' : '') + customerName(i.customerId) + ' — ' + money(invoiceTotal(i)) + ' (' + i.number + ', ' + (st === 'overdue' ? plural(daysBetween(i.dueDate, t), 'day') + ' late' : 'due ' + fmtDate(i.dueDate)) + ')';
+      });
+      return say('<strong>' + money(total) + '</strong> outstanding' + (od.length ? ', ' + plural(od.length, 'invoice') + ' overdue' : '') + ':' + list(rows),
+        'You are owed ' + spokenMoney(total) + ' in total. ' + (od.length ? od.length + ' overdue. The biggest is ' + customerName(od[0].customerId) + ' at ' + spokenMoney(invoiceTotal(od[0])) + '.' : 'Nothing is overdue yet.'));
+    }
+
+    if (/\b(invoiced|unbilled|not billed|haven\'?t billed|need to bill|bill)\b/.test(q)) {
+      var ub = uninvoicedJobs();
+      if (!ub.length) return say('Every finished job has been invoiced. Nice work.', 'Every finished job has been invoiced.');
+      var amtU = ub.reduce(function (s, j) { return s + (Number(j.amount) || 0); }, 0);
+      return say(plural(ub.length, 'finished job') + ' not invoiced yet — <strong>' + money(amtU) + '</strong>:' + list(ub.map(function (j) { return fmtDate(j.date) + ' · ' + jobLine(j); })) + 'Open a job and tap “Create Invoice” to bill it.',
+        'You have ' + plural(ub.length, 'finished job') + ' worth ' + spokenMoney(amtU) + ' that have not been invoiced.');
+    }
+
+    if (/\b(spend|spent|expense|expenses|cost|costs)\b/.test(q)) {
+      var pr = periodRange(q);
+      var catQ = /fuel|gas|diesel/.test(q) ? 'Fuel' : /dump|disposal/.test(q) ? 'Dump/Disposal Fees' : /repair|maintenance/.test(q) ? 'Maintenance & Repairs' : null;
+      var list2 = db.expenses.filter(function (e) { return e.date >= pr.from && e.date <= pr.to && (!catQ || e.category === catQ); });
+      var sum = list2.reduce(function (s, e) { return s + (Number(e.amount) || 0); }, 0);
+      var by = {};
+      list2.forEach(function (e) { by[e.category] = (by[e.category] || 0) + (Number(e.amount) || 0); });
+      var rowsE = Object.keys(by).sort(function (a, b) { return by[b] - by[a]; }).map(function (k) { return k + ': ' + money(by[k]); });
+      return say('You spent <strong>' + money(sum) + '</strong>' + (catQ ? ' on ' + esc(catQ.toLowerCase()) : '') + ' ' + pr.label + '.' + (rowsE.length > 1 ? list(rowsE) : ''),
+        'You spent ' + spokenMoney(sum) + (catQ ? ' on ' + catQ : '') + ' ' + pr.label + '.');
+    }
+
+    if (/\b(make|made|earn|earned|income|revenue|collected|profit|bring in|brought in|doing)\b/.test(q)) {
+      var p = periodRange(q);
+      var inc = incomeBetween(p.from, p.to), ex = expensesBetween(p.from, p.to);
+      return say('<strong>' + esc(p.label.charAt(0).toUpperCase() + p.label.slice(1)) + ':</strong>' + list(['Collected: ' + money(inc), 'Expenses: ' + money(ex), 'Profit: ' + money(inc - ex)]),
+        p.label.charAt(0).toUpperCase() + p.label.slice(1) + ', you collected ' + spokenMoney(inc) + ', spent ' + spokenMoney(ex) + ', for a profit of ' + spokenMoney(inc - ex) + '.');
+    }
+
+    // Navigation
+    var nav = q.match(/\b(open|go to|show|take me to)\b.*\b(home|dashboard|customers|jobs|invoices|money|settings)\b/);
+    if (nav) {
+      var dest = nav[2] === 'home' ? 'dashboard' : nav[2];
+      if (dest === 'settings') { settingsForm(); return say('Opening settings.'); }
+      speak('Opening ' + nav[2] + '.');
+      return setTab(dest);
+    }
+
+    // Customer lookup / call / text
+    var cust = findCustomer(q);
+    if (cust) {
+      var jobsC = db.jobs.filter(function (j) { return j.customerId === cust.id; }).sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
+      var owed = db.invoices.filter(function (i) { return i.customerId === cust.id && (invoiceStatus(i) === 'sent' || invoiceStatus(i) === 'overdue'); })
+        .reduce(function (s, i) { return s + invoiceTotal(i); }, 0);
+      var next = jobsC.filter(function (j) { return j.status === 'scheduled' && j.date >= t; }).pop();
+      var info = [cust.phone ? 'Phone: ' + cust.phone : 'No phone on file', jobsC.length ? plural(jobsC.length, 'job') + ' total, last on ' + fmtDate(jobsC[0].date) : 'No jobs yet',
+        owed ? 'Owes you ' + money(owed) : 'Paid up', next ? 'Next job: ' + fmtDate(next.date) + ' — ' + (next.description || 'Haul') : 'Nothing scheduled'];
+      if (cust.notes) info.push('Notes: ' + cust.notes);
+      var btns = '<div class="btn-row">' + (cust.phone ? '<a class="btn small primary" href="tel:' + esc(cust.phone) + '">📞 Call</a><a class="btn small secondary" href="sms:' + esc(cust.phone) + '">💬 Text</a>' : '') +
+        '<button class="btn small secondary" data-jv="customer" data-id="' + esc(cust.id) + '">Open profile</button></div>';
+      return say('<strong>' + esc(cust.name) + '</strong>' + list(info) + btns,
+        (/\b(call|text|phone|number)\b/.test(q) ? (cust.phone ? 'Here is ' + cust.name + '. Tap call or text.' : 'I do not have a phone number for ' + cust.name + '.') :
+          cust.name + '. ' + (owed ? 'Owes you ' + spokenMoney(owed) + '. ' : 'Paid up. ') + (next ? 'Next job ' + fmtDate(next.date) + '.' : 'Nothing scheduled.')));
+    }
+
+    if (/\b(tomorrow)\b/.test(q)) {
+      var tm = jobsOn(addDays(t, 1));
+      return say(tm.length ? 'Tomorrow (' + esc(fmtDate(addDays(t, 1))) + '):' + list(tm.map(jobLine)) : 'Nothing booked for tomorrow yet.',
+        tm.length ? 'Tomorrow you have ' + plural(tm.length, 'job') + ': ' + tm.map(jobSpoken).join('; ') + '.' : 'Nothing booked for tomorrow yet.');
+    }
+    if (/\b(week|upcoming|coming up|next few days)\b/.test(q)) {
+      var wk = db.jobs.filter(function (j) { return (j.status === 'scheduled' || j.status === 'in-progress') && j.date >= t && j.date <= addDays(t, 7); })
+        .sort(function (a, b) { return a.date.localeCompare(b.date); });
+      var val = wk.reduce(function (s, j) { return s + (Number(j.amount) || 0); }, 0);
+      return say(wk.length ? 'Next 7 days — ' + plural(wk.length, 'job') + ', ' + money(val) + ' booked:' + list(wk.map(function (j) { return fmtDate(j.date) + ' · ' + jobLine(j); })) : 'Nothing booked for the next 7 days. Time to drum up some work.',
+        wk.length ? 'You have ' + plural(wk.length, 'job') + ' in the next week, worth ' + spokenMoney(val) + '.' : 'Nothing booked for the next seven days.');
+    }
+    if (/\b(today|schedule|jobs|job|work|on deck|my day)\b/.test(q)) {
+      var td = jobsOn(t), ms = missedJobs();
+      var h = td.length ? 'Today:' + list(td.map(function (j) { return (j.status === 'in-progress' ? '▶️ ' : '') + jobLine(j); })) : 'No jobs on the schedule today.';
+      if (ms.length) h += '<br>Also, ' + plural(ms.length, 'past job') + ' still marked scheduled:' + list(ms.map(function (j) { return fmtDate(j.date) + ' · ' + jobLine(j); }));
+      return say(h, (td.length ? 'Today you have ' + plural(td.length, 'job') + ': ' + td.map(jobSpoken).join('; ') + '.' : 'No jobs today.') + (ms.length ? ' Also, ' + plural(ms.length, 'older job') + ' still need closing out.' : ''));
+    }
+
+    say('I didn\'t quite catch that. Try “daily brief”, “who owes me”, “what\'s on today”, or say “help”.', 'Sorry, I did not catch that. Say help to hear what I can do.');
+  }
+
+  // --- Listening ---
+  var recognizer = null;
+  function toggleListen() {
+    if (!SpeechRec) { toast('Voice input isn\'t supported in this browser — type instead'); var i = document.getElementById('jvInput'); if (i) i.focus(); return; }
+    if (jarvisListening && recognizer) { recognizer.stop(); return; }
+    if (window.speechSynthesis) speechSynthesis.cancel();
+    recognizer = new SpeechRec();
+    recognizer.lang = 'en-US';
+    recognizer.interimResults = true;
+    recognizer.maxAlternatives = 1;
+    var finalText = '';
+    recognizer.onstart = function () { jarvisListening = true; setOrb('listening'); var m = document.getElementById('jvMic'); if (m) m.classList.add('on'); };
+    recognizer.onresult = function (ev) {
+      var interim = '';
+      for (var k = ev.resultIndex; k < ev.results.length; k++) {
+        if (ev.results[k].isFinal) finalText += ev.results[k][0].transcript; else interim += ev.results[k][0].transcript;
+      }
+      var inp = document.getElementById('jvInput'); if (inp) inp.value = finalText + interim;
+    };
+    recognizer.onerror = function (ev) {
+      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') toast('Allow microphone access to talk to Jarvis');
+    };
+    recognizer.onend = function () {
+      jarvisListening = false; setOrb('');
+      var m = document.getElementById('jvMic'); if (m) m.classList.remove('on');
+      var inp = document.getElementById('jvInput');
+      var said = finalText || (inp ? inp.value : '');
+      if (inp) inp.value = '';
+      if (said.trim()) handle(said);
+    };
+    recognizer.start();
+  }
+
+  // --- View ---
+  function renderJarvisLog() {
+    var log = document.getElementById('jvLog');
+    if (!log) return;
+    log.innerHTML = jarvisLog.map(function (m) { return '<div class="jv-msg ' + m.from + '">' + m.html + '</div>'; }).join('');
+    log.querySelectorAll('[data-jv]').forEach(function (b) {
+      b.onclick = function () {
+        if (b.dataset.jv === 'replay' && jarvisLastBrief) speak(jarvisLastBrief.speech);
+        if (b.dataset.jv === 'customer') { currentTab = 'customers'; document.querySelectorAll('.nav-btn').forEach(function (n) { n.classList.toggle('active', n.dataset.tab === 'customers'); }); subView = { type: 'customer', id: b.dataset.id }; render(); }
+      };
+    });
+    var last = log.lastElementChild;
+    if (last && jarvisLog.length > 1) last.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function renderJarvis() {
+    var html = '<div class="jv-hero"><button class="jv-orb" id="jvOrb" aria-label="Stop speaking"><span></span></button>' +
+      '<div><div class="jv-name">JARVIS</div><div class="jv-status" id="jvStatus"></div></div></div>' +
+      '<div class="chips jv-chips">' +
+      [['brief', '☀️ Daily brief'], ['what\'s on today', '🚚 Today'], ['who owes me', '💵 Who owes me'], ['how much did I make this month', '📈 This month'], ['what haven\'t I invoiced', '🧾 Not invoiced'], ['weather', '🌤️ Weather'], ['help', '❔ Help']]
+        .map(function (c) { return '<button class="chip" data-ask="' + esc(c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>' +
+      '<div id="jvLog" class="jv-log"></div>' +
+      '<form class="jv-bar" id="jvForm"><input id="jvInput" type="text" placeholder="Ask Jarvis anything…" autocomplete="off" enterkeyhint="send">' +
+      '<button type="button" class="jv-mic" id="jvMic" aria-label="Talk">🎙️</button><button type="submit" class="jv-send" aria-label="Send">➤</button></form>';
+    viewEl.innerHTML = html;
+    setOrb(window.speechSynthesis && speechSynthesis.speaking ? 'speaking' : '');
+    document.getElementById('jvOrb').onclick = function () { if (window.speechSynthesis) speechSynthesis.cancel(); setOrb(''); };
+    document.getElementById('jvMic').onclick = toggleListen;
+    document.getElementById('jvForm').onsubmit = function (e) {
+      e.preventDefault();
+      var inp = document.getElementById('jvInput');
+      var v = inp.value; inp.value = '';
+      handle(v);
+    };
+    viewEl.querySelectorAll('[data-ask]').forEach(function (c) { c.onclick = function () { handle(c.dataset.ask); }; });
+    if (!jarvisLog.length) {
+      if (db.settings.lastBriefDate !== todayStr()) runBrief();
+      else say('Welcome back. Ask me anything, or tap ☀️ Daily brief for a fresh rundown.');
+    } else renderJarvisLog();
+  }
+
   // ---------- First run ----------
   if (!db.customers.length && !db.invoices.length && !localStorage.getItem(STORE_KEY)) {
     save();
@@ -963,5 +1521,9 @@
     }, 400);
   }
 
-  render();
+  if (db.settings.jarvisAutoBrief !== 'off' && db.settings.lastBriefDate !== todayStr() && localStorage.getItem(STORE_KEY) && (db.customers.length || db.jobs.length)) {
+    setTab('jarvis');
+  } else {
+    render();
+  }
 })();

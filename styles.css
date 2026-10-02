@@ -108,7 +108,7 @@ body {
 .bottomnav {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
   max-width: 640px; margin: 0 auto;
-  display: grid; grid-template-columns: repeat(6, 1fr);
+  display: grid; grid-template-columns: repeat(5, 1fr);
   background: var(--surface); border-top: 1px solid var(--line);
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -119,59 +119,6 @@ body {
 }
 .nav-btn .nav-icon { font-size: 1.25rem; }
 .nav-btn.active { color: var(--brand-2); }
-
-/* Jarvis */
-.jv-card {
-  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; font: inherit;
-  background: var(--brand); color: var(--plate-ink); border: 1px solid var(--plate-ink);
-  border-radius: var(--radius); padding: 12px 14px; margin-bottom: 12px; cursor: pointer;
-}
-.jv-card small { color: #cbb878; font-size: .8rem; }
-.jv-card .jv-go { margin-left: auto; font-size: 1.5rem; }
-.jv-hero { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
-.jv-name { font-weight: 800; letter-spacing: .18em; color: var(--brand-2); }
-.jv-status { font-size: .8rem; color: var(--text-2); }
-.jv-orb {
-  position: relative; flex-shrink: 0; width: 58px; height: 58px; border-radius: 50%; border: none; cursor: pointer;
-  background: radial-gradient(circle at 35% 30%, #fff3c4, #d9bd4e 35%, #6b5310 75%, #1a1405);
-  box-shadow: 0 0 0 3px rgba(217,189,78,.25), 0 0 18px rgba(217,189,78,.35);
-}
-.jv-orb.mini { width: 36px; height: 36px; }
-.jv-orb span { position: absolute; inset: -6px; border-radius: 50%; border: 2px solid rgba(217,189,78,.0); }
-.jv-orb.listening span { border-color: rgba(217,189,78,.8); animation: jvPulse 1s ease-out infinite; }
-.jv-orb.speaking { animation: jvGlow .7s ease-in-out infinite alternate; }
-.jv-orb.thinking { animation: jvGlow 1.4s ease-in-out infinite alternate; opacity: .8; }
-@keyframes jvPulse { from { transform: scale(.9); opacity: 1; } to { transform: scale(1.35); opacity: 0; } }
-@keyframes jvGlow { from { box-shadow: 0 0 0 3px rgba(217,189,78,.25), 0 0 10px rgba(217,189,78,.3); } to { box-shadow: 0 0 0 6px rgba(217,189,78,.35), 0 0 30px rgba(217,189,78,.7); } }
-@media (prefers-reduced-motion: reduce) { .jv-orb, .jv-orb span { animation: none !important; } }
-.jv-log { display: flex; flex-direction: column; gap: 10px; padding-bottom: 70px; }
-.jv-msg { max-width: 92%; padding: 10px 13px; border-radius: 14px; font-size: .9rem; overflow-wrap: anywhere; }
-.jv-msg.jarvis { align-self: flex-start; background: var(--surface); box-shadow: var(--shadow); border-top-left-radius: 4px; width: 92%; }
-.jv-msg.me { align-self: flex-end; background: var(--emphasis); color: var(--emphasis-ink); border-top-right-radius: 4px; }
-.jv-msg a.btn { text-decoration: none; }
-.jv-list { margin: 6px 0 2px 18px; }
-.jv-list li { margin-bottom: 3px; }
-.brief-sec { border-left: 3px solid var(--line); padding: 2px 0 2px 10px; margin: 4px 0 12px; }
-.brief-sec.accent { border-color: var(--brand-2); }
-.brief-sec.warn { border-color: var(--amber); }
-.brief-sec.bad { border-color: var(--red); }
-.brief-sec.good { border-color: var(--green); }
-.brief-head { font-weight: 750; font-size: .82rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); display: flex; gap: 6px; margin-bottom: 4px; }
-.brief-sec ul { margin-left: 18px; font-size: .88rem; }
-.brief-sec li { margin-bottom: 3px; }
-.jv-bar {
-  position: fixed; left: 0; right: 0; z-index: 19; max-width: 640px; margin: 0 auto;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 58px);
-  display: flex; gap: 8px; padding: 8px 12px; background: var(--bg); border-top: 1px solid var(--line);
-}
-.jv-bar input {
-  flex: 1; min-width: 0; padding: 11px 14px; border-radius: 99px; border: 1px solid var(--line);
-  background: var(--surface); color: var(--text); font-size: 16px;
-}
-.jv-mic, .jv-send { flex-shrink: 0; width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer; font-size: 1.1rem; }
-.jv-mic { background: var(--emphasis); color: var(--emphasis-ink); }
-.jv-mic.on { background: var(--red); animation: jvGlow .6s infinite alternate; }
-.jv-send { background: var(--surface-2); color: var(--text); }
 
 /* FAB */
 .fab {
